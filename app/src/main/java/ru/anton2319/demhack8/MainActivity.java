@@ -6,12 +6,13 @@ import android.view.View;
 import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.Observer;
 
 import ru.anton2319.demhack8.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
 
-    private ActivityMainBinding binding;
+    protected ActivityMainBinding binding;
     Button connectButton;
     MainActivityViewModel mainActivityViewModel;
 
