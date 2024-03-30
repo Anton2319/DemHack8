@@ -21,7 +21,6 @@
             android:layout_width="wrap_content"
             android:layout_height="25dp"
             android:layout_marginStart="10dp"
-            android:layout_marginTop="@*android:dimen/status_bar_height"
             android:shadowColor="@android:color/darker_gray"
             android:shadowDx="0"
             android:shadowRadius="10"
