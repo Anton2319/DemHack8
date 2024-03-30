@@ -1,26 +1,38 @@
 package ru.anton2319.demhack8;
 
-import static androidx.core.app.ActivityCompat.startActivityForResult;
+import static com.wireguard.android.backend.Tunnel.State.UP;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Insets;
 import android.net.VpnService;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowInsets;
 
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.wireguard.android.backend.Backend;
+
+import ru.anton2319.demhack8.data.singleton.PersistentConnectionProperties;
 import ru.anton2319.demhack8.data.singleton.SocksPersistent;
 import ru.anton2319.demhack8.services.SocksProxyService;
+import ru.anton2319.demhack8.services.wireguard.WgController;
+import ru.anton2319.demhack8.services.wireguard.WgTunnel;
+import ru.anton2319.demhack8.utils.HttpsConnectivityChecker;
 
 public class MainActivityViewModel extends ViewModel {
+    boolean wireguardIsUp = false;
     String TAG = "MainActivityViewModel";
+
+    WgController wgController;
 
     private final MutableLiveData<String> connectionButtonText = new MutableLiveData<>();
 
     public MainActivityViewModel(MainActivity mainActivity) {
         connectionButtonText.setValue("connect");
+        wgController  = new WgController(mainActivity);
         //noinspection Convert2Lambda
         mainActivity.connectButton = mainActivity.findViewById(R.id.connect_button);
         mainActivity.connectButton.setOnClickListener(new View.OnClickListener() {
@@ -29,28 +41,133 @@ public class MainActivityViewModel extends ViewModel {
                 toggleVpn(mainActivity);
             }
         });
+
         Log.d(TAG, "ViewModel has initialized successfully!");
     }
 
     private void toggleVpn(Activity activity) {
-        if(SocksPersistent.getInstance().getVpnThread() == null || !SocksPersistent.getInstance().getVpnThread().isAlive()) {
-            Log.d(TAG, "Preparing VpnService");
-            Intent intentPrepare = VpnService.prepare(activity);
-            if (intentPrepare != null) {
-                Log.d(TAG, "Toggled off due to missing permission");
-                activity.startActivityForResult(intentPrepare, 0);
-                return;
-            }
-            SocksPersistent.getInstance().setVpnIntent(new Intent(activity, SocksProxyService.class));
-            activity.startService(SocksPersistent.getInstance().getVpnIntent());
-            Log.d(TAG, "Toggled on");
+        if(!getState()) {
+            PersistentConnectionProperties.getInstance().setAutoProtocolThread(new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Log.d(TAG, "Preparing VpnService");
+                    Intent intentPrepare = VpnService.prepare(activity);
+                    if (intentPrepare != null) {
+                        Log.d(TAG, "Toggled off due to missing permission");
+                        activity.startActivityForResult(intentPrepare, 0);
+                        return;
+                    }
+                    try {
+                        Log.d(TAG, "Toggling on");
+                        if (PersistentConnectionProperties.getInstance().getWireGuardInitiationThread() != null) {
+                            PersistentConnectionProperties.getInstance().getWireGuardInitiationThread().interrupt();
+                        }
+                        wgController.connect("REDACTED:40000", "OGldQ4F+94FX2XAUfZb6hx30U3/aeZ8Xn6V07Egw/3M=", "172.16.0.2", false, false);
+                        waitForWireguard(10000);
+                        if (!wireguardIsUp) {
+                            Log.d(TAG, "WireGuard failure, falling back to Shadowsocks");
+                            wgController.shutdown();
+                        }
+                        if (Thread.interrupted()) {
+                            return;
+                        }
+                        boolean connectivityCheckSuccessful = false;
+                        if (wireguardIsUp) {
+                            connectivityCheckSuccessful = new HttpsConnectivityChecker(PersistentConnectionProperties.getInstance().getAutoProtocolThread()).sendRequestAndCheckResponseWithRetries();
+                        }
+                        if (Thread.interrupted()) {
+                            wgController.shutdown();
+                            return;
+                        }
+                        if (!connectivityCheckSuccessful) {
+                            SocksPersistent.getInstance().setVpnIntent(new Intent(activity, SocksProxyService.class));
+                            activity.startService(SocksPersistent.getInstance().getVpnIntent());
+                        }
+                    }
+                    catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }));
+            PersistentConnectionProperties.getInstance().getAutoProtocolThread().start();
         }
         else {
             Log.d(TAG, "Toggled off");
-            Thread vpnThread = SocksPersistent.getInstance().getVpnThread();
+            Thread autoProtocolThread = PersistentConnectionProperties.getInstance().getAutoProtocolThread();
+            if(autoProtocolThread != null) {
+                autoProtocolThread.interrupt();
+            }
+            Thread wireGuardThread = PersistentConnectionProperties.getInstance().getWireGuardInitiationThread();
+            if(wireGuardThread != null) {
+                wireGuardThread.interrupt();
+            }
+            wgController.shutdown();
+            Thread vpnThread = PersistentConnectionProperties.getInstance().getVpnThread();
             if(vpnThread != null) {
                 vpnThread.interrupt();
             }
+        }
+    }
+
+    public void waitForWireguard(long timeout) throws InterruptedException {
+        Thread thread = new Thread() {
+            @Override
+            public void run() {
+                while (!Thread.interrupted()) {
+                    boolean wireguardIsReady = checkForWg();
+                    if (wireguardIsReady) {
+                        wireguardIsUp = true;
+                        break;
+                    }
+                    try {
+                        sleep(200);
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+        };
+        thread.start();
+        thread.join(timeout);
+    }
+
+    private boolean checkForWg() {
+        if (PersistentConnectionProperties.getInstance().getBackend() != null && PersistentConnectionProperties.getInstance().getTunnel() != null) {
+            Backend backend = PersistentConnectionProperties.getInstance().getBackend();
+            WgTunnel tunnel = PersistentConnectionProperties.getInstance().getTunnel();
+            try {
+                if (backend.getState(tunnel) == UP) {
+                    // wireguard initial welcome message has a length of 92 bytes
+                    if (backend.getStatistics(tunnel).totalRx() > 92) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } catch (Exception e) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean getState() {
+        try {
+            Thread autoProtocolThread = PersistentConnectionProperties.getInstance().getAutoProtocolThread();
+            if (autoProtocolThread != null) {
+                if (autoProtocolThread.isAlive()) {
+                    return false;
+                }
+            }
+            if (PersistentConnectionProperties.getInstance().getBackend().getState(PersistentConnectionProperties.getInstance().getTunnel()) == UP || SocksPersistent.getInstance().getVpnThread().isAlive()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
         }
     }
 }

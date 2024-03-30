@@ -49,7 +49,7 @@ public class SocksProxyService extends VpnService {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Log.d(TAG, "Cannot handle shutdown gracefully, killing the service");
+            Log.d(TAG, "Cannot handle graceful shutdown, killing the service");
             android.os.Process.killProcess(android.os.Process.myPid());
         }
         Log.d(TAG, "onDestroy completed, now calling stopSelf");
@@ -85,8 +85,8 @@ public class SocksProxyService extends VpnService {
             key.setMTU(1500);
             key.setDevice("fd://" + vpnInterface.getFd());
             key.setInterface("");
-            key.setLogLevel("warning");
-            key.setProxy("ss://AEAD_CHACHA20_POLY1305:kRa25h97@REDACTED:8488");
+            key.setLogLevel("info");
+            key.setProxy("ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpnSSRKekNQWUFCa2lfSTRLMzJ3ZFRWV0BARDdWblRhdCNVcUR1Y0BKRnRLQk5WYWVCejVreFRSRXB5aCNlaTNN@REDACTED");
             key.setRestAPI("");
             key.setTCPSendBufferSize("");
             key.setTCPReceiveBufferSize("");
@@ -94,6 +94,8 @@ public class SocksProxyService extends VpnService {
 
             engine.Engine.insert(key);
             engine.Engine.start();
+
+            Log.d(TAG, "Service has commanded to start native library. Shadowsocks is initializing");
 
             while (true) {
                 if (Thread.interrupted()) {

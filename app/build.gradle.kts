@@ -42,6 +42,7 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     // TODO: use absolute path
+    implementation("com.wireguard.android:tunnel:1.0.20230427")
     implementation(files("/Users/anton/AndroidStudioProjects/DemHack8/app/libs/tun2socks.aar"))
     implementation(libs.preference)
     testImplementation(libs.junit)

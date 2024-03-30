@@ -7,9 +7,9 @@ public class SocksPersistent {
     private static volatile SocksPersistent instance = null;
     private static final Object lock = new Object();
 
-    private Intent vpnIntent;
-
     private Thread vpnThread;
+
+    Intent vpnIntent;
 
     ParcelFileDescriptor vpnInterface;
 
