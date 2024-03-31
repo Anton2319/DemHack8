@@ -16,29 +16,32 @@ import androidx.lifecycle.ViewModel;
 
 import com.wireguard.android.backend.Backend;
 
+import java.net.HttpCookie;
+
 import ru.anton2319.demhack8.data.singleton.PersistentConnectionProperties;
 import ru.anton2319.demhack8.data.singleton.SocksPersistent;
+import ru.anton2319.demhack8.services.BackgroundConnectivityChecker;
 import ru.anton2319.demhack8.services.SocksProxyService;
 import ru.anton2319.demhack8.services.wireguard.WgController;
 import ru.anton2319.demhack8.services.wireguard.WgTunnel;
 import ru.anton2319.demhack8.utils.HttpsConnectivityChecker;
 
 public class MainActivityViewModel extends ViewModel {
-    boolean wireguardIsUp = false;
-    String TAG = "MainActivityViewModel";
+    private final MutableLiveData<String> connectionButtonText = PersistentConnectionProperties.getInstance().getConnectionButtonText();
+    private final MutableLiveData<String> protocolText = PersistentConnectionProperties.getInstance().getProtocolText();
+    private final MutableLiveData<String> statusText = PersistentConnectionProperties.getInstance().getStatusText();
 
     WgController wgController;
 
-    private final MutableLiveData<String> connectionButtonText = new MutableLiveData<>();
-    private final MutableLiveData<String> protocolText = new MutableLiveData<>();
-
-    private final MutableLiveData<String> statusText = new MutableLiveData<>();
+    boolean wireguardIsUp = false;
+    String TAG = "MainActivityViewModel";
 
     public MainActivityViewModel(MainActivity mainActivity) {
         connectionButtonText.setValue("connect");
         protocolText.setValue(null);
         statusText.setValue(null);
         wgController  = new WgController(mainActivity);
+        PersistentConnectionProperties.getInstance().setWgController(wgController);
         //noinspection Convert2Lambda
         mainActivity.connectButton = mainActivity.findViewById(R.id.connect_button);
         mainActivity.connectButton.setOnClickListener(new View.OnClickListener() {
@@ -96,6 +99,7 @@ public class MainActivityViewModel extends ViewModel {
                 });
             }
         });
+        PersistentConnectionProperties.getInstance().setMainActivity(mainActivity);
         Log.d(TAG, "ViewModel has initialized successfully!");
     }
 
@@ -145,6 +149,8 @@ public class MainActivityViewModel extends ViewModel {
                             SocksPersistent.getInstance().setVpnIntent(new Intent(activity, SocksProxyService.class));
                             activity.startService(SocksPersistent.getInstance().getVpnIntent());
                             activity.runOnUiThread(() -> connectionButtonText.setValue("disconnect"));
+                            Intent startIntent = new Intent(activity, BackgroundConnectivityChecker.class);
+                            activity.startService(startIntent);
                         }
                         else {
                             activity.runOnUiThread(new Runnable() {
@@ -152,6 +158,8 @@ public class MainActivityViewModel extends ViewModel {
                                    public void run() {
                                        activity.runOnUiThread(() -> statusText.setValue(null));
                                        connectionButtonText.setValue("disconnect");
+                                       Intent startIntent = new Intent(activity, BackgroundConnectivityChecker.class);
+                                       activity.startService(startIntent);
                                    }
                                }
                             );
@@ -184,6 +192,8 @@ public class MainActivityViewModel extends ViewModel {
     private void shutdownAll(Activity activity) {
         activity.runOnUiThread(() -> statusText.setValue(null));
         activity.runOnUiThread(() -> protocolText.setValue(null));
+        Intent stopIntent = new Intent(activity, BackgroundConnectivityChecker.class);
+        activity.stopService(stopIntent);
         Thread autoProtocolThread = PersistentConnectionProperties.getInstance().getAutoProtocolThread();
         if(autoProtocolThread != null) {
             autoProtocolThread.interrupt();

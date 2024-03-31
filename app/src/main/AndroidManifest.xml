@@ -33,5 +33,10 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+        <service
+            android:name=".services.BackgroundConnectivityChecker"
+            android:exported="true"
+            android:permission="android.permission.INTERNET" >
+        </service>
     </application>
 </manifest>
