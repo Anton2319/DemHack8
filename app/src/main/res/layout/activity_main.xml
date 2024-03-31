@@ -5,6 +5,7 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:animateLayoutChanges="true"
     tools:context=".MainActivity">
 
 
@@ -48,9 +49,34 @@
         android:text="connect"
         android:textSize="14sp"
         app:cornerRadius="15dp"
-        app:fontFamily="@font/brother1816_bold"
+        app:fontFamily="@font/brother1816_regular"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/protocol_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Sample protocol info"
+        app:fontFamily="@font/brother1816_bold"
+        android:textSize="14sp"
+        android:layout_marginTop="40dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/connect_button" />
+
+    <TextView
+        android:id="@+id/status_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Sample status info"
+        app:fontFamily="@font/brother1816_regular"
+        android:textSize="14sp"
+        android:layout_marginTop="10dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/protocol_info" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

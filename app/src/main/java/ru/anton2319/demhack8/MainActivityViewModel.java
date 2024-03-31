@@ -30,9 +30,14 @@ public class MainActivityViewModel extends ViewModel {
     WgController wgController;
 
     private final MutableLiveData<String> connectionButtonText = new MutableLiveData<>();
+    private final MutableLiveData<String> protocolText = new MutableLiveData<>();
+
+    private final MutableLiveData<String> statusText = new MutableLiveData<>();
 
     public MainActivityViewModel(MainActivity mainActivity) {
         connectionButtonText.setValue("connect");
+        protocolText.setValue(null);
+        statusText.setValue(null);
         wgController  = new WgController(mainActivity);
         //noinspection Convert2Lambda
         mainActivity.connectButton = mainActivity.findViewById(R.id.connect_button);
@@ -54,12 +59,50 @@ public class MainActivityViewModel extends ViewModel {
             }
         });
 
+        protocolText.observe(mainActivity, new Observer<String>() {
+            @Override
+            public void onChanged(String newData) {
+                mainActivity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (newData == null || newData.equals("")) {
+                            mainActivity.binding.protocolInfo.setVisibility(View.INVISIBLE);
+                        }
+                        else {
+                            mainActivity.binding.protocolInfo.setText("Protocol: " + newData);
+                            mainActivity.binding.protocolInfo.setVisibility(View.VISIBLE);
+                        }
+
+                    }
+                });
+            }
+        });
+
+        statusText.observe(mainActivity, new Observer<String>() {
+            @Override
+            public void onChanged(String newData) {
+                mainActivity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (newData == null || newData.equals("")) {
+                            mainActivity.binding.statusInfo.setVisibility(View.INVISIBLE);
+                        }
+                        else {
+                            mainActivity.binding.statusInfo.setText(newData);
+                            mainActivity.binding.statusInfo.setVisibility(View.VISIBLE);
+                        }
+
+                    }
+                });
+            }
+        });
         Log.d(TAG, "ViewModel has initialized successfully!");
     }
 
     private void toggleVpn(Activity activity) {
         if(!getState()) {
             connectionButtonText.setValue("connecting");
+            // TODO: replace thread with cancellable
             PersistentConnectionProperties.getInstance().setAutoProtocolThread(new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -72,10 +115,12 @@ public class MainActivityViewModel extends ViewModel {
                     }
                     try {
                         Log.d(TAG, "Toggling on");
+                        activity.runOnUiThread(() -> protocolText.setValue("WireGuard"));
                         if (PersistentConnectionProperties.getInstance().getWireGuardInitiationThread() != null) {
                             PersistentConnectionProperties.getInstance().getWireGuardInitiationThread().interrupt();
                         }
-                        wgController.connect("REDACTED:40000", "OGldQ4F+94FX2XAUfZb6hx30U3/aeZ8Xn6V07Egw/3M=", "172.16.0.2", false, false);
+                        wgController.connect("REDACTED:40001", "OGldQ4F+94FX2XAUfZb6hx30U3/aeZ8Xn6V07Egw/3M=", "172.16.0.2", false, false);
+                        activity.runOnUiThread(() -> statusText.setValue("Establishing wireguard connection"));
                         waitForWireguard(10000);
                         if (!wireguardIsUp) {
                             Log.d(TAG, "WireGuard failure, falling back to Shadowsocks");
@@ -85,6 +130,7 @@ public class MainActivityViewModel extends ViewModel {
                             return;
                         }
                         boolean connectivityCheckSuccessful = false;
+                        activity.runOnUiThread(() -> statusText.setValue("Performing connectivity check"));
                         if (wireguardIsUp) {
                             connectivityCheckSuccessful = new HttpsConnectivityChecker(PersistentConnectionProperties.getInstance().getAutoProtocolThread()).sendRequestAndCheckResponseWithRetries();
                         }
@@ -93,20 +139,18 @@ public class MainActivityViewModel extends ViewModel {
                             return;
                         }
                         if (!connectivityCheckSuccessful) {
+                            activity.runOnUiThread(() -> statusText.setValue("Falling back to shadowsocks"));
+                            activity.runOnUiThread(() -> protocolText.setValue("Shadowsocks"));
+                            activity.runOnUiThread(() -> statusText.setValue(null));
                             SocksPersistent.getInstance().setVpnIntent(new Intent(activity, SocksProxyService.class));
                             activity.startService(SocksPersistent.getInstance().getVpnIntent());
-                            activity.runOnUiThread(new Runnable() {
-                                   @Override
-                                   public void run() {
-                                       connectionButtonText.setValue("disconnect");
-                                   }
-                               }
-                            );
+                            activity.runOnUiThread(() -> connectionButtonText.setValue("disconnect"));
                         }
                         else {
                             activity.runOnUiThread(new Runnable() {
                                    @Override
                                    public void run() {
+                                       activity.runOnUiThread(() -> statusText.setValue(null));
                                        connectionButtonText.setValue("disconnect");
                                    }
                                }
@@ -118,6 +162,8 @@ public class MainActivityViewModel extends ViewModel {
                         activity.runOnUiThread(new Runnable() {
                                @Override
                                public void run() {
+                                   connectionButtonText.setValue("disconnecting");
+                                   shutdownAll(activity);
                                    connectionButtonText.setValue("connect");
                                }
                            }
@@ -130,24 +176,30 @@ public class MainActivityViewModel extends ViewModel {
         else {
             Log.d(TAG, "Toggled off");
             connectionButtonText.setValue("disconnecting");
-            Thread autoProtocolThread = PersistentConnectionProperties.getInstance().getAutoProtocolThread();
-            if(autoProtocolThread != null) {
-                autoProtocolThread.interrupt();
-            }
-            Thread wireGuardThread = PersistentConnectionProperties.getInstance().getWireGuardInitiationThread();
-            if(wireGuardThread != null) {
-                wireGuardThread.interrupt();
-            }
-            wgController.shutdown();
-            Thread vpnThread = SocksPersistent.getInstance().getVpnThread();
-            if(vpnThread != null) {
-                vpnThread.interrupt();
-            }
-            Intent vpnIntent = SocksPersistent.getInstance().getVpnIntent();
-            if(vpnIntent != null) {
-                activity.stopService(vpnIntent);
-            }
+            shutdownAll(activity);
             connectionButtonText.setValue("connect");
+        }
+    }
+
+    private void shutdownAll(Activity activity) {
+        activity.runOnUiThread(() -> statusText.setValue(null));
+        activity.runOnUiThread(() -> protocolText.setValue(null));
+        Thread autoProtocolThread = PersistentConnectionProperties.getInstance().getAutoProtocolThread();
+        if(autoProtocolThread != null) {
+            autoProtocolThread.interrupt();
+        }
+        Thread wireGuardThread = PersistentConnectionProperties.getInstance().getWireGuardInitiationThread();
+        if(wireGuardThread != null) {
+            wireGuardThread.interrupt();
+        }
+        wgController.shutdown();
+        Thread vpnThread = SocksPersistent.getInstance().getVpnThread();
+        if(vpnThread != null) {
+            vpnThread.interrupt();
+        }
+        Intent vpnIntent = SocksPersistent.getInstance().getVpnIntent();
+        if(vpnIntent != null) {
+            activity.stopService(vpnIntent);
         }
     }
 
