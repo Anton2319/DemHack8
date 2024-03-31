@@ -123,7 +123,7 @@ public class MainActivityViewModel extends ViewModel {
                         if (PersistentConnectionProperties.getInstance().getWireGuardInitiationThread() != null) {
                             PersistentConnectionProperties.getInstance().getWireGuardInitiationThread().interrupt();
                         }
-                        wgController.connect("REDACTED:40001", "OGldQ4F+94FX2XAUfZb6hx30U3/aeZ8Xn6V07Egw/3M=", "172.16.0.2", false, false);
+                        wgController.connect("REDACTED:40000", "OGldQ4F+94FX2XAUfZb6hx30U3/aeZ8Xn6V07Egw/3M=", "172.16.0.2", false, false);
                         activity.runOnUiThread(() -> statusText.setValue("Establishing wireguard connection"));
                         waitForWireguard(10000);
                         if (!wireguardIsUp) {
